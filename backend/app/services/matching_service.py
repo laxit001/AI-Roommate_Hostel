@@ -40,6 +40,21 @@ class MatchingService:
             return 0.0
             
         return dot_product / (norm_a * norm_b)
+        
+    @staticmethod
+    def _generate_explanation(t_user, m_user):
+        traits = ['cleanliness', 'sleep', 'discipline', 'noise', 'emotional', 'social']
+        deltas = []
+        for t in traits:
+            # Gather safe differentials preventing KeyErrors
+            diff = abs(t_user.get(t, 5) - m_user.get(t, 5))
+            deltas.append((diff, t))
+            
+        # Sort dynamically pointing at the mathematically closest vectors
+        deltas.sort(key=lambda x: x[0])
+        best, second = deltas[0][1], deltas[1][1]
+        
+        return f"Matched cleanly due to highly similar {best} expectations and {second} preferences!"
 
     @staticmethod
     def get_top_matches(user_id):
@@ -89,7 +104,8 @@ class MatchingService:
                 'trust_score': trust_score,
                 'confidence_score': confidence_score,
                 'penalty_level': penalty_level,
-                'final_score': round(final_score, 4)
+                'final_score': round(final_score, 4),
+                'explanation': MatchingService._generate_explanation(target_user, u)
             })
             
         # Sort descending by final score

@@ -15,7 +15,7 @@ class ChatService:
         if not user_data:
             raise ValueError("User not found context")
             
-        matches = MatchingService.get_matches(user_id)
+        matches = MatchingService.get_top_matches(user_id)
         mess_bookings = MessModel.get_user_bookings(user_id)
         laundry_bookings = LaundryModel.get_user_bookings(user_id)
         

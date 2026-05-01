@@ -49,6 +49,82 @@ class UserModel:
                 return result
         finally:
             connection.close()
+    @staticmethod
+    def get_user_by_email(email):
+        connection = get_db_connection()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
+                return cursor.fetchone()
+        finally:
+            connection.close()
+            
+    @staticmethod
+    def create_auth_user(name, email, google_id, is_verified):
+        connection = get_db_connection()
+        try:
+            with connection.cursor() as cursor:
+                sql = "INSERT INTO users (name, email, google_id, is_verified) VALUES (%s, %s, %s, %s)"
+                cursor.execute(sql, (name, email, google_id, is_verified))
+            connection.commit()
+            return cursor.lastrowid
+        finally:
+            connection.close()
+
+    @staticmethod
+    def set_user_verified(user_id):
+        connection = get_db_connection()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("UPDATE users SET is_verified = TRUE WHERE user_id = %s", (user_id,))
+            connection.commit()
+        finally:
+            connection.close()
+
+    @staticmethod
+    def update_google_id(user_id, google_id):
+        connection = get_db_connection()
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("UPDATE users SET google_id = %s WHERE user_id = %s", (google_id, user_id))
+            connection.commit()
+        finally:
+            connection.close()
+
+    @staticmethod
+    def store_otp(email, hashed_otp, expires_at):
+        connection = get_db_connection()
+        try:
+            with connection.cursor() as cursor:
+                 cursor.execute("INSERT INTO otp_codes (email, hashed_otp, expires_at) VALUES (%s, %s, %s)", (email, hashed_otp, expires_at))
+            connection.commit()
+        finally:
+            connection.close()
+            
+    @staticmethod
+    def get_latest_otp(email):
+        connection = get_db_connection()
+        try:
+            with connection.cursor() as cursor:
+                 cursor.execute("SELECT * FROM otp_codes WHERE email = %s ORDER BY created_at DESC LIMIT 1", (email,))
+                 return cursor.fetchone()
+        finally:
+            connection.close()
+            
+    @staticmethod
+    def update_user_profile(user_id, name, c, d, so, n, sl, e):
+        connection = get_db_connection()
+        try:
+            with connection.cursor() as cursor:
+                sql = """
+                UPDATE users 
+                SET name=%s, cleanliness=%s, discipline=%s, social=%s, noise=%s, sleep=%s, emotional=%s
+                WHERE user_id=%s
+                """
+                cursor.execute(sql, (name, c, d, so, n, sl, e, user_id))
+            connection.commit()
+        finally:
+            connection.close()
 
     @staticmethod
     def get_user_by_id(user_id):

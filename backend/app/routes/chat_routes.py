@@ -1,30 +1,31 @@
 from flask import Blueprint, jsonify, request, abort
 from app.services.chat_service import ChatService
+from app.utils.jwt import token_required
 
 chat_bp = Blueprint('chat_bp', __name__)
 
-@chat_bp.route('/chat', methods=['POST'])
-def get_chat_recommendations():
+@chat_bp.route('', methods=['POST'])
+@chat_bp.route('/', methods=['POST'])
+@token_required
+def get_chat_recommendations(current_user):
     """
-    Accepts user ID and text query to communicate back an AI response driven by vector metrics.
+    Accepts JSON text query to communicate back an AI response driven by vector metrics safely tracking local identity.
     """
     if not request.is_json:
-        abort(400, description="Payload must be JSON")
+        abort(400, description="Payload structure inherently invalid.")
         
     payload = request.get_json()
-    user_id = payload.get('user_id')
-    prompt = payload.get('prompt')
+    message = payload.get('message')
     
-    if not user_id or not prompt:
-        abort(400, description="Missing required fields: user_id, prompt")
+    if not message:
+        abort(400, description="Missing strict required field: message")
         
     try:
-        response_text = ChatService.get_ai_response(user_id, prompt)
+        # Pass payload mapping securely isolated from forged headers
+        response_text = ChatService.get_chat_response(current_user['user_id'], message)
         return jsonify({
             "status": "success",
-            "data": {
-                "response": response_text
-            }
+            "response": response_text
         }), 200
         
     except ValueError as ve:

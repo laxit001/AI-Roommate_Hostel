@@ -1,27 +1,49 @@
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, useLocation } from 'react-router-dom'
+import { GoogleOAuthProvider } from '@react-oauth/google'
+import ProtectedRoute from './components/ProtectedRoute'
 import Sidebar from './components/Sidebar'
 import Dashboard from './pages/Dashboard'
 import MessBooking from './pages/MessBooking'
 import LaundryBooking from './pages/LaundryBooking'
 import ChatWidget from './components/ChatWidget'
+import Login from './pages/Login'
+import Matches from './pages/Matches'
+import Complaints from './pages/Complaints'
+import Profile from './pages/Profile'
+import { AuthProvider } from './context/AuthContext'
 
-function App() {
+function AppContent() {
+  const location = useLocation()
+  const isAuthPage = location.pathname === '/login'
+
   return (
     <div className="flex h-screen bg-slate-50 font-sans">
-      <Sidebar />
-      <div className="flex-1 overflow-x-hidden overflow-y-auto">
+      {!isAuthPage && <Sidebar />}
+      <div className={`flex-1 overflow-x-hidden overflow-y-auto ${isAuthPage ? '' : 'pl-0'}`}>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/matching" element={<div className="p-8"><h1 className="text-2xl font-bold">Roommate Matching</h1></div>} />
-          <Route path="/mess" element={<MessBooking />} />
-          <Route path="/laundry" element={<LaundryBooking />} />
-          <Route path="/complaints" element={<div className="p-8"><h1 className="text-2xl font-bold">Complaints</h1></div>} />
-          <Route path="/profile" element={<div className="p-8"><h1 className="text-2xl font-bold">Profile</h1></div>} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/matching" element={<ProtectedRoute><Matches /></ProtectedRoute>} />
+          <Route path="/mess" element={<ProtectedRoute><MessBooking /></ProtectedRoute>} />
+          <Route path="/laundry" element={<ProtectedRoute><LaundryBooking /></ProtectedRoute>} />
+          <Route path="/complaints" element={<ProtectedRoute><Complaints /></ProtectedRoute>} />
+          <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
         </Routes>
       </div>
-      <ChatWidget />
+      {!isAuthPage && <ChatWidget />}
     </div>
   )
 }
+
+function App() {
+  return (
+    <GoogleOAuthProvider clientId="dummy-client-id-for-dev.apps.googleusercontent.com">
+       <AuthProvider>
+         <AppContent />
+       </AuthProvider>
+    </GoogleOAuthProvider>
+  )
+}
+
 
 export default App

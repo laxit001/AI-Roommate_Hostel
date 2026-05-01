@@ -1,8 +1,10 @@
 import React from 'react'
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Users, Utensils, Shirt, AlertTriangle, User } from 'lucide-react'
+import { LayoutDashboard, Users, Utensils, Shirt, AlertTriangle, User, LogOut } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
 
 const Sidebar = () => {
+  const { logout } = useAuth()
   const links = [
     { name: 'Dashboard', path: '/', icon: LayoutDashboard },
     { name: 'Matching', path: '/matching', icon: Users },
@@ -35,8 +37,17 @@ const Sidebar = () => {
           </NavLink>
         ))}
       </nav>
-      <div className="p-4 border-t border-slate-700 text-sm text-slate-400 text-center">
-        Powered by AI Backend
+      <div className="p-4 border-t border-slate-700 flex flex-col gap-2">
+        <button 
+          onClick={logout}
+          className="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 hover:bg-red-500/10 text-slate-400 hover:text-red-400 w-full"
+        >
+          <LogOut size={20} />
+          <span className="font-medium">Logout</span>
+        </button>
+        <div className="text-xs text-slate-500 text-center mt-2">
+          Powered by AI Backend
+        </div>
       </div>
     </aside>
   )

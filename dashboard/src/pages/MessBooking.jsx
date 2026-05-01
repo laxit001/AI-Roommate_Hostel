@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import apiClient from '../apiClient'
 
 const MessBooking = () => {
   const [activeDay, setActiveDay] = useState('Monday')
@@ -6,8 +7,10 @@ const MessBooking = () => {
   const [myBookings, setMyBookings] = useState([])
   const [errorText, setErrorText] = useState('')
 
-  // Placeholder active user ID (assuming user is logged in natively, mapping randomly to 1 for demo purposes)
-  const currentUserId = 1;
+  // Fetch user payload securely checking authentication validity
+  const userStr = localStorage.getItem('hostel_user');
+  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const currentUserId = currentUser ? currentUser.user_id : null;
 
   // Simple date generator for demonstration grouping strings correctly without complexity
   const daysMap = { 'Monday': '2026-05-04', 'Tuesday': '2026-05-05' } 
@@ -15,17 +18,15 @@ const MessBooking = () => {
 
   const fetchMenu = async (day) => {
     try {
-      const res = await fetch(`http://127.0.0.1:5000/api/mess/menu?day_of_week=${day}`)
-      const data = await res.json()
-      if (res.ok) setMenu(data.data)
+      const res = await apiClient.get(`/mess/menu?day_of_week=${day}`)
+      setMenu(res.data.data)
     } catch(err) { console.error("Error fetching menu", err) }
   }
 
   const fetchBookings = async () => {
     try {
-      const res = await fetch(`http://127.0.0.1:5000/api/mess/bookings?user_id=${currentUserId}`)
-      const data = await res.json()
-      if (res.ok) setMyBookings(data.data)
+      const res = await apiClient.get(`/mess/bookings?user_id=${currentUserId}`)
+      setMyBookings(res.data.data)
     } catch(err) { console.error("Error fetching bookings", err) }
   }
 
@@ -42,14 +43,8 @@ const MessBooking = () => {
         booking_date: activeDate,
         meal_type: mealType
       }
-      const res = await fetch('http://127.0.0.1:5000/api/mess/book', {
-        method: 'POST',
-        headers:{'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-      })
-      const data = await res.json()
-      if(!res.ok) throw new Error(data.message || data.error || data.description || "Booking failed")
-      
+      await apiClient.post('/mess/book', payload)
+
       // Successfully booked! Refresh UI
       fetchBookings()
     } catch(err) {

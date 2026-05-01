@@ -1,13 +1,39 @@
-import React from 'react'
-import { Bell, Shield, Calendar, Info } from 'lucide-react'
+import React, { useState, useEffect } from 'react'
+import { Bell, Shield, Calendar, Info, Loader2 } from 'lucide-react'
+import apiClient from '../apiClient'
 
 const Dashboard = () => {
+  const [userData, setUserData] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const response = await apiClient.get('/profile')
+        setUserData(response.data.data)
+      } catch (error) {
+        console.error("Failed to fetch profile:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchProfile()
+  }, [])
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center p-8 mt-20">
+        <Loader2 className="animate-spin text-indigo-600" size={48} />
+      </div>
+    )
+  }
+
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8">
       {/* Header Info */}
       <header className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800">Welcome Back, Alex! 👋</h1>
+          <h1 className="text-3xl font-bold text-slate-800">Welcome Back, {userData?.name || 'User'}! 👋</h1>
           <p className="text-slate-500 mt-1">Room 412, North Wing</p>
         </div>
         <div className="flex items-center gap-4">

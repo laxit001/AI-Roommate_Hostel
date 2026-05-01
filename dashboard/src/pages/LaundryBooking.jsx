@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Html5QrcodeScanner } from 'html5-qrcode'
+import apiClient from '../apiClient'
 
 const LaundryBooking = () => {
     const [activeDate, setActiveDate] = useState('2026-05-04')
@@ -10,22 +11,22 @@ const LaundryBooking = () => {
     const [scanResult, setScanResult] = useState(null)
     const [errorText, setErrorText] = useState('')
     
-    const currentUserId = 1; // Assuming native user ID 1 matching our standard mapping
+    const userStr = localStorage.getItem('hostel_user')
+    const currentUser = userStr ? JSON.parse(userStr) : null
+    const currentUserId = currentUser ? currentUser.user_id : null
     
     const fetchSlots = async () => {
         try {
-            const res = await fetch(`http://127.0.0.1:5000/api/laundry/slots?date=${activeDate}`)
-            const data = await res.json()
-            if (res.ok) setSlots(data.data)
-        } catch(err) { console.error('Error fetching slots', err) }
+            const res = await apiClient.get(`/laundry/slots?date=${activeDate}`)
+            setSlots(res.data.data)
+        } catch(err) {}
     }
     
     const fetchMyBookings = async () => {
         try {
-            const res = await fetch(`http://127.0.0.1:5000/api/laundry/my-bookings?user_id=${currentUserId}`)
-            const data = await res.json()
-            if (res.ok) setMyBookings(data.data)
-        } catch(err) { console.error('Error fetching my bookings', err) }
+            const res = await apiClient.get(`/laundry/my-bookings?user_id=${currentUserId}`)
+            setMyBookings(res.data.data)
+        } catch(err) {}
     }
     
     useEffect(() => {
@@ -37,17 +38,10 @@ const LaundryBooking = () => {
         setErrorText('')
         try {
             const payload = { user_id: currentUserId, booking_date: activeDate, slot_time: slotTime }
-            const res = await fetch('http://127.0.0.1:5000/api/laundry/book', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            })
-            const data = await res.json()
-            if(!res.ok) throw new Error(data.description || 'Booking failed')
-            
+            await apiClient.post('/laundry/book', payload)
             fetchSlots()
             fetchMyBookings()
-        } catch(err) { setErrorText(err.message) }
+        } catch(err) { setErrorText(err.response?.data?.description || 'Reservation constrained gracefully.') }
     }
     
     // Physical hardware camera scanning hook implementation
@@ -60,17 +54,11 @@ const LaundryBooking = () => {
                 
                 // Submit the physical QR encoded logic natively back into our python verification framework
                 try {
-                    const res = await fetch('http://127.0.0.1:5000/api/laundry/scan', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ qr_data: text })
-                    })
-                    const data = await res.json()
-                    if(!res.ok) throw new Error(data.description || 'Scan rejected externally')
-                    setScanResult({ success: true, message: data.data.message })
+                    const res = await apiClient.post('/laundry/scan', { qr_data: text })
+                    setScanResult({ success: true, message: res.data.data.message })
                     fetchMyBookings()
                 } catch(err) {
-                    setScanResult({ success: false, message: err.message })
+                    setScanResult({ success: false, message: err.response?.data?.description || 'Hardware denied scan execution' })
                 }
             }, (error) => {
                 // Ignore standard rapid frame scan missing errors to prevent console logging blasts

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { MessageSquare, X, Send, Loader2 } from 'lucide-react'
+import apiClient from '../apiClient'
 
 const ChatWidget = () => {
   const [isOpen, setIsOpen] = useState(false)
@@ -10,7 +11,9 @@ const ChatWidget = () => {
   const [isTyping, setIsTyping] = useState(false)
   const messagesEndRef = useRef(null)
 
-  const currentUserId = 1;
+  const userStr = localStorage.getItem('hostel_user');
+  const currentUser = userStr ? JSON.parse(userStr) : null;
+  const currentUserId = currentUser ? currentUser.user_id : null;
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -29,15 +32,8 @@ const ChatWidget = () => {
     setIsTyping(true)
 
     try {
-      const res = await fetch('http://127.0.0.1:5000/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: currentUserId, message: userMsg })
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.message || data.error || data.description || "Failed backend processing")
-      
-      setMessages(prev => [...prev, { role: 'ai', text: data.response }])
+      const res = await apiClient.post('/chat', { user_id: currentUserId, message: userMsg })
+      setMessages(prev => [...prev, { role: 'ai', text: res.data.response }])
     } catch (err) {
       setMessages(prev => [...prev, { role: 'ai', text: `ERROR: ${err.message}` }])
     } finally {
