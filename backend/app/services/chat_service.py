@@ -44,16 +44,46 @@ class ChatService:
 
         headers = {
             "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "HTTP-Referer": "http://localhost:5173",
+            "X-Title": "Hostel Super App"
         }
-        
-        payload = {
-            "model": "google/gemma-4-26b-a4b-it:free",
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ]
-        }
+
+        # Try models in order until one works
+        FREE_MODELS = [
+            "deepseek/deepseek-r1:free",
+            "google/gemma-2-9b-it:free",
+            "meta-llama/llama-3.2-3b-instruct:free",
+            "qwen/qwen-2-7b-instruct:free",
+        ]
+
+        last_error = "No models available"
+        for model_name in FREE_MODELS:
+            payload = {
+                "model": model_name,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ]
+            }
+            try:
+                response = requests.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                    timeout=30
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    return data['choices'][0]['message']['content']
+                else:
+                    last_error = response.text
+                    print(f"[Chat] Model {model_name} failed ({response.status_code}): {response.text[:200]}")
+                    continue
+            except Exception as e:
+                last_error = str(e)
+                print(f"[Chat] Model {model_name} exception: {e}")
+                continue
         
         try:
             response = requests.post(

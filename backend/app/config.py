@@ -14,7 +14,7 @@ class Config:
     DB_PORT = int(os.environ.get('DB_PORT', 3306))
     
     # AI Integration
-    OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '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')
+    OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', 'your_key_here')
     
     # Secure JWT Encryption Keys
     JWT_SECRET = os.environ.get('JWT_SECRET', 'super_secret_hostel_fallback_key')

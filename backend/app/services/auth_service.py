@@ -1,90 +1,143 @@
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 import bcrypt
-import pyotp
+import secrets
 import smtplib
-from email.message import EmailMessage
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from app.config import Config
 from app.models.user import UserModel
 from app.utils.jwt import generate_token
 
+
 class AuthService:
+
     @staticmethod
     def verify_google_oauth(token):
+        """Verify Google ID token and return JWT."""
         try:
-            # Decode payload directly interacting with Google APIs safely leveraging client ID validation
-            idinfo = id_token.verify_oauth2_token(token, google_requests.Request(), Config.GOOGLE_CLIENT_ID)
+            idinfo = id_token.verify_oauth2_token(
+                token,
+                google_requests.Request(),
+                Config.GOOGLE_CLIENT_ID
+            )
             email = idinfo['email']
-            name = idinfo.get('name', 'Student User')
+            name = idinfo.get('name', 'Student')
             google_id = idinfo['sub']
-            
-            # Reconcile user natively mapping identity logic seamlessly
+
             user = UserModel.get_user_by_email(email)
             if not user:
-                # If they don't exist, instantiate default empty vector structure bound to verified state
                 user_id = UserModel.create_auth_user(name, email, google_id, True)
             else:
                 user_id = user['user_id']
-                # Sync status natively in database
                 UserModel.set_user_verified(user_id)
                 UserModel.update_google_id(user_id, google_id)
-                
+
             jwt_token = generate_token(user_id)
-            return {"token": jwt_token, "user_id": user_id, "email": email, "name": name}
+            return {
+                "token": jwt_token,
+                "user_id": user_id,
+                "email": email,
+                "name": name
+            }
         except ValueError:
-            raise ValueError("Invalid Google OAuth Cryptographic Signature.")
+            raise ValueError("Invalid Google OAuth token signature.")
 
     @staticmethod
     def generate_and_send_otp(email):
-        # Generate 6-digit integer natively utilizing strict cryptographic mathematical randomness 
-        totp = pyotp.TOTP(pyotp.random_base32())
-        otp_code = totp.now()
-        
-        # Hash inherently blocking direct database enumeration threats
-        hashed_otp = bcrypt.hashpw(otp_code.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        expires_at = datetime.utcnow() + timedelta(minutes=5)
-        
+        """
+        Generate a secure 6-digit OTP, bcrypt-hash it, store it,
+        and send it via email. Falls back to console log if SMTP fails.
+        """
+        # Generate a cryptographically random 6-digit code
+        otp_code = str(secrets.randbelow(1_000_000)).zfill(6)
+
+        # Hash before storing — never store plaintext OTPs
+        hashed_otp = bcrypt.hashpw(
+            otp_code.encode('utf-8'),
+            bcrypt.gensalt()
+        ).decode('utf-8')
+
+        expires_at = datetime.utcnow() + timedelta(minutes=10)
         UserModel.store_otp(email, hashed_otp, expires_at)
-        
-        # Simulated Console log bounding local development logic if SMTP passwords aren't live deployed
-        print(f"\n[{datetime.utcnow()}] SECURE OTP DISPATCHED TO {email} -> CODE: {otp_code}\n")
-        
+
+        # Always print to console for local development
+        print(f"\n[OTP] Code for {email}: {otp_code}  (expires in 10 min)\n")
+
+        # Attempt to send via SMTP (silently fails if misconfigured)
         try:
-            msg = EmailMessage()
-            msg.set_content(f"Your secure Hostel Verification OTP is: {otp_code}.\nIt is valid for 5 minutes.")
-            msg['Subject'] = 'Hostel Platform Account Protocol'
+            msg = MIMEMultipart('alternative')
+            msg['Subject'] = '🏠 Your Hostel Login Code'
             msg['From'] = Config.SMTP_USER
             msg['To'] = email
-            
-            # Encapsulate natively blocking execution halts if misconfigured locally by dev
+
+            html_body = f"""
+            <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;background:#f8fafc;border-radius:16px;">
+              <h2 style="color:#4f46e5;margin-bottom:8px;">Hostel Super App</h2>
+              <p style="color:#64748b;">Your one-time login code is:</p>
+              <div style="font-size:48px;font-weight:900;letter-spacing:12px;color:#1e293b;
+                          background:#e0e7ff;padding:24px;border-radius:12px;text-align:center;margin:24px 0;">
+                {otp_code}
+              </div>
+              <p style="color:#64748b;font-size:13px;">This code expires in <strong>10 minutes</strong>. Do not share it with anyone.</p>
+            </div>
+            """
+            msg.attach(MIMEText(html_body, 'html'))
+
             server = smtplib.SMTP(Config.SMTP_HOST, Config.SMTP_PORT)
             server.starttls()
             server.login(Config.SMTP_USER, Config.SMTP_PASS)
             server.send_message(msg)
             server.quit()
-        except:
-            pass # Yielding cleanly
+            print(f"[OTP] Email sent successfully to {email}")
+        except Exception as smtp_err:
+            # SMTP failure is non-fatal — OTP is still in DB and printed to console
+            print(f"[OTP] SMTP failed (check .env): {smtp_err}")
 
     @staticmethod
     def verify_otp(email, otp_code):
+        """
+        Validate the submitted OTP against the stored bcrypt hash.
+        Returns JWT token on success.
+        """
         record = UserModel.get_latest_otp(email)
         if not record:
-            raise ValueError("Authorization Context Missing: No active OTP tracked for this email identity.")
-            
-        if datetime.utcnow() > record['expires_at']:
-            raise ValueError("Sequence Timeframe Collapsed: OTP has expired cleanly. Please issue a new challenge.")
-            
-        if not bcrypt.checkpw(otp_code.encode('utf-8'), record['hashed_otp'].encode('utf-8')):
-            raise ValueError("Decryption Collision: Invalid Mathematical Verification Match.")
-            
+            raise ValueError("No active OTP found for this email. Please request a new one.")
+
+        if record.get('used'):
+            raise ValueError("This OTP has already been used. Please request a new one.")
+
+        # Convert expires_at to naive UTC datetime for comparison
+        expires_at = record['expires_at']
+        if isinstance(expires_at, str):
+            expires_at = datetime.strptime(expires_at, '%Y-%m-%d %H:%M:%S')
+        if datetime.utcnow() > expires_at:
+            raise ValueError("OTP has expired. Please request a new code.")
+
+        if not bcrypt.checkpw(
+            otp_code.encode('utf-8'),
+            record['hashed_otp'].encode('utf-8')
+        ):
+            raise ValueError("Invalid OTP. Please check the code and try again.")
+
+        # Mark OTP as used to prevent replay attacks
+        UserModel.mark_otp_used(record['id'])
+
+        # Upsert user record
         user = UserModel.get_user_by_email(email)
         if not user:
-            # First time user accessing via pure OTP cleanly
             user_id = UserModel.create_auth_user("Student", email, None, True)
+            name = "Student"
         else:
             user_id = user['user_id']
+            name = user.get('name', 'Student')
             UserModel.set_user_verified(user_id)
-            
+
         jwt_token = generate_token(user_id)
-        return {"token": jwt_token, "user_id": user_id, "email": email}
+        return {
+            "token": jwt_token,
+            "user_id": user_id,
+            "email": email,
+            "name": name
+        }

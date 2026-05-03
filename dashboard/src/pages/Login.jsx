@@ -1,121 +1,218 @@
 import React, { useState } from 'react'
 import { GoogleLogin } from '@react-oauth/google'
-import { Mail, KeyRound, Loader2, Link } from 'lucide-react'
+import { Mail, KeyRound, Loader2, Home } from 'lucide-react'
 import apiClient from '../apiClient'
 import { useAuth } from '../context/AuthContext'
 
 const Login = () => {
-    const { login } = useAuth()
-    const [mode, setMode] = useState('selector') // 'selector', 'otp_send', 'otp_verify'
-    const [email, setEmail] = useState('')
-    const [otp, setOtp] = useState('')
-    const [error, setError] = useState('')
-    const [loading, setLoading] = useState(false)
+  const { login } = useAuth()
+  const [mode,    setMode]    = useState('selector') // 'selector' | 'otp_send' | 'otp_verify'
+  const [email,   setEmail]   = useState('')
+  const [otp,     setOtp]     = useState('')
+  const [error,   setError]   = useState('')
+  const [info,    setInfo]    = useState('')
+  const [loading, setLoading] = useState(false)
 
-    // Secure authentication success handler bridging states
-    const handleAuthSuccess = (token, user) => {
-        login(token, user)
+  const handleGoogleSuccess = async (credentialResponse) => {
+    setError('')
+    try {
+      const res = await apiClient.post('/auth/google', { token: credentialResponse.credential })
+      login(res.data.data.token, res.data.data)
+    } catch (err) {
+      setError(err.response?.data?.description || 'Google sign-in failed. Please try again.')
     }
+  }
 
-    const handleGoogleSuccess = async (credentialResponse) => {
-        try {
-            const res = await apiClient.post('/auth/google', { token: credentialResponse.credential })
-            handleAuthSuccess(res.data.data.token, res.data.data)
-        } catch (err) {
-            setError(err.response?.data?.description || 'Google Authentication execution logic failed.')
-        }
+  const requestOtp = async () => {
+    if (!email.includes('@') || !email.includes('.')) {
+      setError('Please enter a valid email address.')
+      return
     }
-
-    const requestOtp = async () => {
-        if (!email.includes('@')) return setError("Syntactically malformed email structure.")
-        setLoading(true)
-        setError('')
-        try {
-            await apiClient.post('/auth/send-otp', { email })
-            setMode('otp_verify')
-        } catch(err) {
-            setError(err.response?.data?.description || 'Failed reaching SMTP tracking provider.')
-        } finally {
-            setLoading(false)
-        }
+    setLoading(true)
+    setError('')
+    try {
+      await apiClient.post('/auth/send-otp', { email })
+      setMode('otp_verify')
+      setInfo(`A 6-digit code has been sent to ${email}. Check your inbox (and spam folder).`)
+    } catch (err) {
+      setError(err.response?.data?.description || 'Could not send OTP. Check your backend SMTP config.')
+    } finally {
+      setLoading(false)
     }
+  }
 
-    const verifyOtp = async () => {
-        setLoading(true)
-        setError('')
-        try {
-            const res = await apiClient.post('/auth/verify-otp', { email, otp_code: otp })
-            handleAuthSuccess(res.data.data.token, res.data.data)
-        } catch(err) {
-            setError(err.response?.data?.description || 'OTP Key mismatch.')
-        } finally {
-            setLoading(false)
-        }
+  const verifyOtp = async () => {
+    if (otp.length !== 6) { setError('Please enter the full 6-digit code.'); return }
+    setLoading(true)
+    setError('')
+    try {
+      const res = await apiClient.post('/auth/verify-otp', { email, otp_code: otp })
+      login(res.data.data.token, res.data.data)
+    } catch (err) {
+      setError(err.response?.data?.description || 'Invalid or expired OTP. Please try again.')
+    } finally {
+      setLoading(false)
     }
+  }
 
-    return (
-        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-            <div className="bg-white max-w-md w-full p-8 rounded-3xl shadow-xl flex flex-col items-center">
-                 <div className="w-16 h-16 bg-indigo-600 rounded-2xl shadow-lg flex items-center justify-center mb-6">
-                      <Link size={32} className="text-white" />
-                 </div>
-                 <h1 className="text-3xl font-black text-slate-800 mb-2 tracking-tight">Hostel Platform</h1>
-                 <p className="text-slate-500 font-medium mb-8 text-center text-sm">Secure Authentication Gateway validating student identity tokens seamlessly.</p>
-                 
-                 {error && <div className="bg-red-50 text-red-600 w-full p-4 rounded-xl text-sm font-bold mb-6 text-center border border-red-100">{error}</div>}
+  return (
+    <div className="login-page">
+      <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+        <div style={{
+          position: 'absolute', top: '10%', left: '10%',
+          width: 400, height: 400,
+          background: 'radial-gradient(circle, rgba(99,102,241,.3) 0%, transparent 70%)',
+          borderRadius: '50%', filter: 'blur(40px)'
+        }} />
+        <div style={{
+          position: 'absolute', bottom: '10%', right: '10%',
+          width: 300, height: 300,
+          background: 'radial-gradient(circle, rgba(139,92,246,.25) 0%, transparent 70%)',
+          borderRadius: '50%', filter: 'blur(40px)'
+        }} />
+      </div>
 
-                 {mode === 'selector' && (
-                     <div className="w-full space-y-4">
-                         <div className="flex justify-center mb-6 scale-110">
-                              <GoogleLogin 
-                                   onSuccess={handleGoogleSuccess} 
-                                   onError={() => setError('Google OAuth bridge failure')}
-                                   theme="filled_black"
-                                   size="large"
-                              />
-                         </div>
-                         <div className="flex items-center gap-4 py-2">
-                             <div className="flex-1 h-px bg-slate-200"></div>
-                             <span className="text-slate-400 font-bold text-xs uppercase tracking-widest">or Secure Email</span>
-                             <div className="flex-1 h-px bg-slate-200"></div>
-                         </div>
-                         <button onClick={() => setMode('otp_send')} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 py-3 rounded-xl font-bold transition flex items-center justify-center gap-2">
-                             <Mail size={18} /> Continue with Email OTP
-                         </button>
-                     </div>
-                 )}
-
-                 {mode === 'otp_send' && (
-                     <div className="w-full space-y-4">
-                         <div>
-                             <label className="text-xs font-bold uppercase tracking-wider text-slate-500 pl-1 mb-1 block">Campus Email</label>
-                             <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition" placeholder="student@university.edu" />
-                         </div>
-                         <button onClick={requestOtp} disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 py-4 rounded-xl font-bold shadow-md transition flex items-center justify-center gap-2">
-                             {loading ? <Loader2 className="animate-spin" size={18} /> : 'Dispatch Secure OTP Pattern'}
-                         </button>
-                         <button onClick={() => setMode('selector')} className="w-full py-2 text-slate-400 text-sm font-bold hover:text-slate-600 transition">Cancel</button>
-                     </div>
-                 )}
-
-                 {mode === 'otp_verify' && (
-                     <div className="w-full space-y-4">
-                         <div className="bg-indigo-50 text-indigo-700 p-4 rounded-xl text-sm font-medium border border-indigo-100 flex items-start gap-3 mb-2">
-                              <KeyRound size={20} className="shrink-0 mt-0.5" />
-                              <p>We've dispatched a 6-digit cryptographic verification vector to <b>{email}</b></p>
-                         </div>
-                         <div>
-                             <input type="text" maxLength={6} value={otp} onChange={e => setOtp(e.target.value)} className="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl text-center text-2xl font-black tracking-[1em] focus:ring-2 focus:ring-indigo-500 outline-none transition placeholder-slate-300" placeholder="000000" />
-                         </div>
-                         <button onClick={verifyOtp} disabled={loading || otp.length !== 6} className="w-full bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-50 py-4 rounded-xl font-bold shadow-md transition flex items-center justify-center gap-2">
-                             {loading ? <Loader2 className="animate-spin" size={18} /> : 'Authenticate Logic Sequence'}
-                         </button>
-                         <button onClick={() => setMode('otp_send')} className="w-full py-2 text-slate-400 text-sm font-bold hover:text-slate-600 transition">Go Back</button>
-                     </div>
-                 )}
-            </div>
+      <div className="login-card animate-in">
+        {/* Logo */}
+        <div style={{ textAlign: 'center', marginBottom: 28 }}>
+          <div style={{
+            width: 64, height: 64, margin: '0 auto 14px',
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            borderRadius: 18,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 10px 30px rgba(99,102,241,.4)'
+          }}>
+            <Home size={30} color="white" />
+          </div>
+          <h1 style={{ fontSize: 26, fontWeight: 900, color: '#0f172a', letterSpacing: -0.5 }}>
+            Hostel Super App
+          </h1>
+          <p style={{ color: '#64748b', fontSize: 13, marginTop: 4 }}>
+            Sign in to access your smart hostel dashboard
+          </p>
         </div>
-    )
+
+        {/* Error / Info */}
+        {error && (
+          <div className="alert alert-error" style={{ marginBottom: 16 }}>
+            <span>⚠️ {error}</span>
+          </div>
+        )}
+        {info && !error && (
+          <div className="alert alert-info" style={{ marginBottom: 16 }}>
+            <span>ℹ️ {info}</span>
+          </div>
+        )}
+
+        {/* Selector mode */}
+        {mode === 'selector' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20, transform: 'scale(1.05)' }}>
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => setError('Google OAuth failed.')}
+                theme="filled_black"
+                size="large"
+                shape="rectangular"
+                width="320"
+              />
+            </div>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20
+            }}>
+              <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+              <span style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                or
+              </span>
+              <div style={{ flex: 1, height: 1, background: '#e2e8f0' }} />
+            </div>
+            <button
+              onClick={() => { setMode('otp_send'); setError('') }}
+              className="btn btn-secondary"
+              style={{ width: '100%', justifyContent: 'center' }}
+            >
+              <Mail size={16} /> Continue with Email OTP
+            </button>
+          </div>
+        )}
+
+        {/* OTP Send mode */}
+        {mode === 'otp_send' && (
+          <div>
+            <div style={{ marginBottom: 16 }}>
+              <label className="input-label">Your Email Address</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && requestOtp()}
+                className="input-field"
+                placeholder="student@university.edu"
+                autoFocus
+              />
+            </div>
+            <button
+              onClick={requestOtp}
+              disabled={loading}
+              className="btn btn-primary btn-lg"
+              style={{ width: '100%', justifyContent: 'center', marginBottom: 12 }}
+            >
+              {loading ? <><Loader2 size={16} style={{ animation: 'spin 0.7s linear infinite' }} /> Sending…</> : 'Send OTP Code'}
+            </button>
+            <button onClick={() => { setMode('selector'); setError('') }} className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center' }}>
+              ← Back
+            </button>
+          </div>
+        )}
+
+        {/* OTP Verify mode */}
+        {mode === 'otp_verify' && (
+          <div>
+            <div style={{
+              display: 'flex', gap: 10, padding: '12px 14px', borderRadius: 10,
+              background: '#eff6ff', border: '1px solid #bfdbfe', marginBottom: 16,
+              alignItems: 'flex-start'
+            }}>
+              <KeyRound size={18} color="#2563eb" style={{ flexShrink: 0, marginTop: 2 }} />
+              <div style={{ fontSize: 13, color: '#1d4ed8', lineHeight: 1.5 }}>
+                Code sent to <strong>{email}</strong>. It expires in <strong>10 minutes</strong>.
+                <br />
+                <span style={{ fontSize: 12, opacity: .8 }}>Check your spam folder if you don't see it. The code is also printed in your backend console for dev testing.</span>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label className="input-label">6-Digit Code</label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                value={otp}
+                onChange={e => setOtp(e.target.value.replace(/\D/g, ''))}
+                onKeyDown={e => e.key === 'Enter' && !loading && verifyOtp()}
+                className="input-field"
+                placeholder="000000"
+                autoFocus
+                style={{ textAlign: 'center', fontSize: 28, fontWeight: 900, letterSpacing: 14 }}
+              />
+            </div>
+
+            <button
+              onClick={verifyOtp}
+              disabled={loading || otp.length !== 6}
+              className="btn btn-primary btn-lg"
+              style={{ width: '100%', justifyContent: 'center', marginBottom: 12 }}
+            >
+              {loading ? <><Loader2 size={16} style={{ animation: 'spin 0.7s linear infinite' }} /> Verifying…</> : 'Verify & Sign In'}
+            </button>
+            <button onClick={() => { setMode('otp_send'); setOtp(''); setError('') }} className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center' }}>
+              ← Change Email
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default Login

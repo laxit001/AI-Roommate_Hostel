@@ -17,9 +17,9 @@ function AppContent() {
   const isAuthPage = location.pathname === '/login'
 
   return (
-    <div className="flex h-screen bg-slate-50 font-sans">
+    <div className="app-shell">
       {!isAuthPage && <Sidebar />}
-      <div className={`flex-1 overflow-x-hidden overflow-y-auto ${isAuthPage ? '' : 'pl-0'}`}>
+      <div className="main-content">
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
@@ -36,14 +36,17 @@ function AppContent() {
 }
 
 function App() {
+  // Replace 'YOUR_GOOGLE_CLIENT_ID' with your actual client ID from Google Cloud Console
+  // For dev/demo, the GoogleOAuthProvider still mounts — OTP login works without it
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || 'placeholder.apps.googleusercontent.com'
+
   return (
-    <GoogleOAuthProvider clientId="dummy-client-id-for-dev.apps.googleusercontent.com">
-       <AuthProvider>
-         <AppContent />
-       </AuthProvider>
+    <GoogleOAuthProvider clientId={googleClientId}>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
     </GoogleOAuthProvider>
   )
 }
-
 
 export default App

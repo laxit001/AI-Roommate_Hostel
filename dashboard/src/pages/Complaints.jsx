@@ -1,84 +1,172 @@
 import React, { useState, useEffect } from 'react'
 import apiClient from '../apiClient'
-import { Loader2, AlertCircle } from 'lucide-react'
+import { AlertCircle, Clock, CheckCircle, Loader2 } from 'lucide-react'
 
 const Complaints = () => {
-    const [complaints, setComplaints] = useState([])
-    const [loading, setLoading] = useState(true)
-    const [roommateId, setRoommateId] = useState('')
-    const [message, setMessage] = useState('')
-    const [status, setStatus] = useState(null)
+  const [complaints, setComplaints]   = useState([])
+  const [loading,    setLoading]      = useState(true)
+  const [matches,    setMatches]      = useState([])
+  const [roommateId, setRoommateId]   = useState('')
+  const [message,    setMessage]      = useState('')
+  const [status,     setStatus]       = useState(null) // { type: 'success'|'error'|'loading', text }
 
-    const fetchLogs = async () => {
-        try {
-            const res = await apiClient.get('/complaints')
-            setComplaints(res.data.data)
-        } catch (err) {
-            console.error(err)
-        } finally {
-            setLoading(false)
-        }
+  const fetchComplaints = async () => {
+    try {
+      const res = await apiClient.get('/complaints/')
+      setComplaints(res.data.data || [])
+    } catch (err) {
+      console.error('Fetch complaints error', err)
+    } finally {
+      setLoading(false)
     }
+  }
 
-    useEffect(() => { fetchLogs() }, [])
-
-    const handleSubmit = async () => {
-        if (!roommateId || !message) return setStatus({ type: 'error', text: 'All fields required' })
-        setStatus({ type: 'loading' })
-        try {
-            await apiClient.post('/complaints', { roommate_id: parseInt(roommateId), message })
-            setStatus({ type: 'success', text: 'Complaint Recorded (-5 Trust Score applied to target)' })
-            setRoommateId('')
-            setMessage('')
-            fetchLogs()
-        } catch(err) {
-            setStatus({ type: 'error', text: 'Creation logic failure' })
-        }
+  const fetchMatches = async () => {
+    try {
+      const res = await apiClient.get('/matches/')
+      setMatches(res.data.data || [])
+    } catch (err) {
+      console.error('Fetch matches for dropdown error', err)
     }
+  }
 
-    return (
-        <div className="p-8 max-w-4xl mx-auto space-y-8">
-             <div>
-                <h1 className="text-3xl font-bold text-slate-800">Room Violations 📢</h1>
-                <p className="text-slate-500 mt-2">Log formal grievances. Our algorithm automatically applies proportionate trust score penalties.</p>
-             </div>
+  useEffect(() => {
+    fetchComplaints()
+    fetchMatches()
+  }, [])
 
-             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-                 <h2 className="text-lg font-bold">Lodge a New Complaint</h2>
-                 {status?.text && <div className={`p-4 rounded-xl text-sm font-bold ${status.type === 'error' ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>{status.text}</div>}
-                 
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                     <div className="md:col-span-1">
-                         <label className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1 block">Target User ID</label>
-                         <input type="number" value={roommateId} onChange={e => setRoommateId(e.target.value)} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-red-500" placeholder="e.g. 4" />
-                     </div>
-                     <div className="md:col-span-2">
-                         <label className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-1 block">Violation Description</label>
-                         <input type="text" value={message} onChange={e => setMessage(e.target.value)} className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl outline-none focus:ring-2 focus:ring-red-500" placeholder="Loud music past 2AM..." />
-                     </div>
-                 </div>
-                 <button onClick={handleSubmit} disabled={status?.type === 'loading'} className="bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-xl font-bold transition flex items-center gap-2">
-                     {status?.type === 'loading' ? <Loader2 className="animate-spin" size={18} /> : <span><AlertCircle size={18} className="inline mr-2" /> Submit Formal Penalty</span>}
-                 </button>
-             </div>
+  const handleSubmit = async () => {
+    if (!roommateId || !message.trim()) {
+      setStatus({ type: 'error', text: 'Please select a roommate and enter a description.' })
+      return
+    }
+    setStatus({ type: 'loading' })
+    try {
+      await apiClient.post('/complaints/', {
+        roommate_id: parseInt(roommateId),
+        message:     message.trim()
+      })
+      setStatus({ type: 'success', text: '✅ Complaint filed. Their trust score has been penalized by -5 points.' })
+      setRoommateId('')
+      setMessage('')
+      fetchComplaints()
+    } catch (err) {
+      const msg = err.response?.data?.description || 'Failed to submit complaint.'
+      setStatus({ type: 'error', text: msg })
+    }
+  }
 
-             <div>
-                 <h2 className="text-lg font-bold mb-4 pl-1">My Reporting History</h2>
-                 <div className="space-y-4">
-                     {loading ? <Loader2 className="animate-spin text-slate-300" /> : complaints.map(c => (
-                         <div key={c.complaint_id} className="bg-white border flex justify-between border-slate-100 p-5 rounded-xl shadow-sm">
-                              <div>
-                                  <p className="text-sm text-slate-800 font-medium mb-1">"{c.message}"</p>
-                                  <p className="text-xs text-slate-400">Filed against Target ID: <span className="font-bold text-red-500">{c.roommate_id}</span></p>
-                              </div>
-                              <div className="text-xs font-bold text-slate-400 underline decoration-dotted">{new Date(c.created_at).toLocaleDateString()}</div>
-                         </div>
-                     ))}
-                     {complaints.length === 0 && !loading && <div className="text-slate-400 text-sm">No complaints logged yet.</div>}
-                 </div>
-             </div>
+  return (
+    <div style={{ padding: '32px', maxWidth: 900, margin: '0 auto' }} className="animate-in">
+
+      <div className="page-header">
+        <h1 className="page-title">📢 Complaints & Violations</h1>
+        <p className="page-subtitle">
+          File formal grievances. Each complaint automatically applies a -5 trust score penalty to the target.
+        </p>
+      </div>
+
+      {/* ── Submit form ── */}
+      <div className="card" style={{ marginBottom: 28 }}>
+        <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 16 }}>Lodge a New Complaint</h2>
+
+        {status?.text && (
+          <div className={`alert ${status.type === 'error' ? 'alert-error' : 'alert-success'}`}
+               style={{ marginBottom: 16 }}>
+            {status.text}
+          </div>
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 16, marginBottom: 16 }}>
+          <div>
+            <label className="input-label">Target Roommate</label>
+            <select
+              value={roommateId}
+              onChange={e => setRoommateId(e.target.value)}
+              className="input-field"
+            >
+              <option value="">— Select roommate —</option>
+              {matches.map(m => (
+                <option key={m.user_id} value={m.user_id}>
+                  {m.name} (Trust: {m.trust_score})
+                </option>
+              ))}
+            </select>
+            {matches.length === 0 && (
+              <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                No matches found. Set up your profile first.
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="input-label">Violation Description</label>
+            <input
+              type="text"
+              value={message}
+              onChange={e => setMessage(e.target.value)}
+              className="input-field"
+              placeholder="Loud music after midnight, unclean common areas…"
+            />
+          </div>
         </div>
-    )
+
+        <button
+          onClick={handleSubmit}
+          disabled={status?.type === 'loading'}
+          className="btn btn-danger"
+        >
+          {status?.type === 'loading'
+            ? <><Loader2 size={16} className="animate-spin" /> Submitting…</>
+            : <><AlertCircle size={16} /> Submit Complaint</>
+          }
+        </button>
+      </div>
+
+      {/* ── History ── */}
+      <div className="card">
+        <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 16 }}>📁 My Complaint History</h2>
+        {loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}>
+            <div className="spinner" />
+          </div>
+        ) : complaints.length === 0 ? (
+          <div style={{ textAlign: 'center', color: '#94a3b8', padding: '32px 0' }}>
+            <CheckCircle size={36} style={{ margin: '0 auto 12px', opacity: .3 }} color="#94a3b8" />
+            <p>No complaints filed yet. Great community member! 🎉</p>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {complaints.map(c => (
+              <div key={c.complaint_id} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                padding: '14px 16px', borderRadius: 12, background: '#fff5f5',
+                border: '1px solid #fed7d7', borderLeft: '4px solid #ef4444'
+              }}>
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: '#0f172a', marginBottom: 4 }}>
+                    "{c.message}"
+                  </p>
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <span className="badge badge-danger">
+                      Against User #{c.roommate_id}
+                    </span>
+                    <span style={{ fontSize: 12, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Clock size={12} />
+                      {new Date(c.created_at).toLocaleDateString('en-IN', {
+                        day: 'numeric', month: 'short', year: 'numeric'
+                      })}
+                    </span>
+                  </div>
+                </div>
+                <span className="badge badge-gray">#{c.complaint_id}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default Complaints

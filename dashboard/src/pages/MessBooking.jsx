@@ -1,133 +1,206 @@
 import React, { useState, useEffect } from 'react'
 import apiClient from '../apiClient'
+import { Utensils, CheckCircle, Clock, Calendar } from 'lucide-react'
+
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+/* Build a 7-day array starting from today */
+function getWeekDates() {
+  const today = new Date()
+  return DAYS.map((day, i) => {
+    const d = new Date(today)
+    // Find the actual date for each day name starting from today's week
+    const dayOfWeek = today.getDay() // 0=Sun, 1=Mon, …
+    const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek
+    const monday = new Date(today)
+    monday.setDate(today.getDate() + mondayOffset)
+    const target = new Date(monday)
+    target.setDate(monday.getDate() + i)
+    return {
+      label: day,
+      date: target.toISOString().split('T')[0],
+      isToday: target.toDateString() === today.toDateString()
+    }
+  })
+}
+
+const MEAL_ICONS = { Breakfast: '🌅', Lunch: '☀️', Dinner: '🌙' }
 
 const MessBooking = () => {
-  const [activeDay, setActiveDay] = useState('Monday')
-  const [menu, setMenu] = useState([])
+  const weekDates = getWeekDates()
+  const todayIdx  = weekDates.findIndex(d => d.isToday)
+  const [activeDayIdx, setActiveDayIdx] = useState(todayIdx >= 0 ? todayIdx : 0)
+  const [menu,       setMenu]       = useState([])
   const [myBookings, setMyBookings] = useState([])
-  const [errorText, setErrorText] = useState('')
+  const [errorText,  setErrorText]  = useState('')
+  const [loading,    setLoading]    = useState(false)
 
-  // Fetch user payload securely checking authentication validity
-  const userStr = localStorage.getItem('hostel_user');
-  const currentUser = userStr ? JSON.parse(userStr) : null;
-  const currentUserId = currentUser ? currentUser.user_id : null;
+  const activeDay  = weekDates[activeDayIdx]
 
-  // Simple date generator for demonstration grouping strings correctly without complexity
-  const daysMap = { 'Monday': '2026-05-04', 'Tuesday': '2026-05-05' } 
-  const activeDate = daysMap[activeDay] || '2026-05-04'
-
-  const fetchMenu = async (day) => {
+  const fetchMenu = async (dayLabel) => {
     try {
-      const res = await apiClient.get(`/mess/menu?day_of_week=${day}`)
-      setMenu(res.data.data)
-    } catch(err) { console.error("Error fetching menu", err) }
+      const res = await apiClient.get(`/mess/menu?day_of_week=${dayLabel}`)
+      setMenu(res.data.data || [])
+    } catch (err) {
+      console.error('Menu fetch error', err)
+    }
   }
 
   const fetchBookings = async () => {
     try {
-      const res = await apiClient.get(`/mess/bookings?user_id=${currentUserId}`)
-      setMyBookings(res.data.data)
-    } catch(err) { console.error("Error fetching bookings", err) }
-  }
-
-  useEffect(() => {
-    fetchMenu(activeDay)
-    fetchBookings()
-  }, [activeDay])
-
-  const handleBook = async (mealType) => {
-    setErrorText('')
-    try {
-      const payload = {
-        user_id: currentUserId,
-        booking_date: activeDate,
-        meal_type: mealType
-      }
-      await apiClient.post('/mess/book', payload)
-
-      // Successfully booked! Refresh UI
-      fetchBookings()
-    } catch(err) {
-      setErrorText(err.message)
+      const res = await apiClient.get('/mess/bookings')
+      setMyBookings(res.data.data || [])
+    } catch (err) {
+      console.error('Bookings fetch error', err)
     }
   }
 
-  const isBooked = (mealType) => {
-    return myBookings.some(b => b.meal_type === mealType && b.booking_date === activeDate)
+  useEffect(() => {
+    fetchMenu(activeDay.label)
+    fetchBookings()
+  }, [activeDayIdx])
+
+  const handleBook = async (mealType) => {
+    setErrorText('')
+    setLoading(true)
+    try {
+      await apiClient.post('/mess/book', {
+        booking_date: activeDay.date,
+        meal_type:    mealType
+      })
+      await fetchBookings()
+    } catch (err) {
+      const msg = err.response?.data?.description || 'Booking failed. Please try again.'
+      setErrorText(msg)
+    } finally {
+      setLoading(false)
+    }
   }
 
+  const isBooked = (mealType) =>
+    myBookings.some(b => b.meal_type === mealType && b.booking_date === activeDay.date)
+
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-6">
-      <h1 className="text-3xl font-bold text-slate-800 mb-6">Mess Menu & Booking 🍲</h1>
-      <p className="text-slate-500 mb-6">Select a day of the week, review the rotating menu, and toggle your attendance slot seamlessly without needing physical tokens!</p>
-      
-      {errorText && <div className="p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">{errorText}</div>}
-      
-      <div className="flex gap-4 border-b border-slate-200 pb-4 mb-4">
-        {['Monday', 'Tuesday'].map(d => (
-          <button 
-            key={d}
-            onClick={() => setActiveDay(d)}
-            className={`px-6 py-2 rounded-lg font-medium transition ${activeDay === d ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200 shadow-sm'}`}
+    <div style={{ padding: '32px', maxWidth: 1000, margin: '0 auto' }} className="animate-in">
+
+      <div className="page-header">
+        <h1 className="page-title">🍽️ Mess Menu & Booking</h1>
+        <p className="page-subtitle">Select a day, review the menu, and lock in your meals.</p>
+      </div>
+
+      {errorText && (
+        <div className="alert alert-error" style={{ marginBottom: 20 }}>
+          <span>⚠️ {errorText}</span>
+        </div>
+      )}
+
+      {/* Day tabs */}
+      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, marginBottom: 24 }}>
+        {weekDates.map((d, i) => (
+          <button
+            key={d.label}
+            onClick={() => setActiveDayIdx(i)}
+            style={{
+              padding: '8px 16px',
+              borderRadius: 10,
+              border: 'none',
+              cursor: 'pointer',
+              fontWeight: 600,
+              fontSize: 13,
+              whiteSpace: 'nowrap',
+              transition: 'all .2s',
+              background: i === activeDayIdx
+                ? 'linear-gradient(135deg, #6366f1, #8b5cf6)'
+                : d.isToday ? '#eef2ff' : '#f1f5f9',
+              color: i === activeDayIdx ? 'white'
+                : d.isToday ? '#6366f1' : '#64748b',
+              boxShadow: i === activeDayIdx ? '0 4px 12px rgba(99,102,241,.4)' : 'none',
+            }}
           >
-            {d}
+            {d.label}
+            {d.isToday && <span style={{ marginLeft: 5, fontSize: 10, opacity: .8 }}>TODAY</span>}
           </button>
         ))}
       </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-         {menu.length === 0 ? <p className="text-slate-400 p-4 border border-slate-200 bg-white rounded-lg">No menu data scheduled for {activeDay}.</p> : menu.map(m => {
-            const booked = isBooked(m.meal_type);
-            return (
-              <div key={m.id} className="bg-white border text-center border-slate-200 shadow-sm p-6 rounded-xl flex flex-col justify-between hover:shadow-md transition">
-                 <div>
-                   <h3 className="text-xl font-bold text-indigo-700">{m.meal_type}</h3>
-                   <p className="mt-3 text-slate-600 min-h-[50px]">{m.items}</p>
-                 </div>
-                 
-                 <div className="mt-6 pt-4 border-t border-slate-100">
-                    <span className={`block mb-4 text-sm tracking-wide uppercase font-bold ${booked ? 'text-emerald-500' : 'text-slate-400'}`}>
-                      {booked ? "✅ Slot Locked In" : "⏳ Not booked"}
-                    </span>
-                    <button 
-                      onClick={() => handleBook(m.meal_type)}
-                      disabled={booked}
-                      className={`w-full py-3 rounded-lg font-bold transition duration-200 ${booked ? 'bg-slate-50 border border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-indigo-600 hover:-translate-y-1 shadow-md text-white hover:bg-indigo-700'}`}
-                    >
-                       {booked ? 'Booked Successfully' : 'Confirm Meal Seat'}
-                    </button>
-                 </div>
-              </div>
-            )
-         })}
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+        <Calendar size={16} color="#6366f1" />
+        <span style={{ fontSize: 13, color: '#64748b', fontWeight: 500 }}>{activeDay.date}</span>
       </div>
-      
-      {/* Historical View */}
-      <h2 className="text-xl font-bold text-slate-800 mt-12 mb-4">Your Active Meal Logs and History</h2>
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 overflow-hidden">
-         <table className="w-full text-left">
-           <thead>
-             <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-xs uppercase tracking-wider">
-                <th className="p-3">Booking Reference UUID</th>
-                <th className="p-3">Physical Date Match</th>
-                <th className="p-3">Menu Type Classification</th>
-                <th className="p-3">System Status</th>
-             </tr>
-           </thead>
-           <tbody>
-             {myBookings.map(b => (
-               <tr key={b.booking_id} className="border-b border-slate-50 hover:bg-slate-50 transition">
-                  <td className="p-3 text-slate-500 text-sm">#MESS-TX-${b.booking_id}</td>
-                  <td className="p-3 font-semibold text-slate-700">{b.booking_date}</td>
-                  <td className="p-3 text-indigo-600 font-bold">{b.meal_type}</td>
-                  <td className="p-3">
-                     <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">Verified Binding</span>
+
+      {/* Menu cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20, marginBottom: 40 }}>
+        {menu.length === 0 ? (
+          <div className="card" style={{ gridColumn: '1/-1', textAlign: 'center', color: '#94a3b8' }}>
+            No menu available for {activeDay.label}.
+          </div>
+        ) : menu.map(m => {
+          const booked = isBooked(m.meal_type)
+          return (
+            <div key={m.id} style={{
+              background: 'white',
+              border: `1px solid ${booked ? '#bbf7d0' : '#e2e8f0'}`,
+              borderRadius: 16,
+              padding: 24,
+              display: 'flex', flexDirection: 'column',
+              boxShadow: booked ? '0 4px 16px rgba(16,185,129,.12)' : '0 1px 3px rgba(0,0,0,.06)',
+              transition: 'all .2s'
+            }}>
+              <div style={{ fontSize: 28, marginBottom: 8 }}>{MEAL_ICONS[m.meal_type] || '🍴'}</div>
+              <h3 style={{ fontSize: 18, fontWeight: 800, color: '#0f172a', marginBottom: 4 }}>{m.meal_type}</h3>
+              <p style={{ fontSize: 13, color: '#64748b', lineHeight: 1.6, flex: 1, marginBottom: 16 }}>{m.items}</p>
+              <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
+                <div style={{ marginBottom: 10 }}>
+                  {booked
+                    ? <span className="badge badge-success"><CheckCircle size={12} /> Booked</span>
+                    : <span className="badge badge-gray"><Clock size={12} /> Not Booked</span>
+                  }
+                </div>
+                <button
+                  onClick={() => handleBook(m.meal_type)}
+                  disabled={booked || loading}
+                  className={booked ? 'btn btn-ghost' : 'btn btn-primary'}
+                  style={{ width: '100%' }}
+                >
+                  {booked ? 'Already Booked' : 'Book This Meal'}
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* History table */}
+      <div className="card">
+        <h2 style={{ fontSize: 17, fontWeight: 700, marginBottom: 16 }}>📋 My Booking History</h2>
+        <div style={{ overflowX: 'auto' }}>
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Booking ID</th>
+                <th>Date</th>
+                <th>Meal</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {myBookings.length === 0 ? (
+                <tr>
+                  <td colSpan={4} style={{ textAlign: 'center', color: '#94a3b8', padding: 24 }}>
+                    No bookings yet. Start booking meals above!
                   </td>
-               </tr>
-             ))}
-             {myBookings.length === 0 && <tr><td colSpan="4" className="p-4 text-center text-slate-400 italic">No historical active meal bookings found connected to your user ID. Start selecting meals above!</td></tr>}
-           </tbody>
-         </table>
+                </tr>
+              ) : myBookings.map(b => (
+                <tr key={b.booking_id}>
+                  <td style={{ fontFamily: 'monospace', color: '#6366f1' }}>#MESS-{b.booking_id}</td>
+                  <td style={{ fontWeight: 600, color: '#0f172a' }}>{b.booking_date}</td>
+                  <td style={{ color: '#6366f1', fontWeight: 600 }}>{b.meal_type}</td>
+                  <td><span className="badge badge-success">Confirmed</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
