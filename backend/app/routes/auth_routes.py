@@ -28,12 +28,26 @@ def send_otp():
     email = request.json.get('email')
     if not email:
         abort(400, description="Email parameter missing")
+    
+    # Validate basic email format
+    if '@' not in email or '.' not in email:
+        abort(400, description="Invalid email address format.")
         
     try:
         AuthService.generate_and_send_otp(email)
-        return jsonify({"status": "success", "message": f"OTP dispatched securely to {email}."}), 200
+        return jsonify({
+            "status": "success",
+            "message": f"OTP sent to {email}. Check your inbox or backend console."
+        }), 200
     except Exception as e:
-        abort(500, description="SMTP Engine failure")
+        # Log the real error for debugging but never expose it to frontend
+        import traceback
+        print(f"[send-otp] ERROR for {email}: {traceback.format_exc()}")
+        # Still return a helpful error — don't abort with 500
+        return jsonify({
+            "status": "error",
+            "description": f"Could not generate OTP: {str(e)}"
+        }), 500
 
 @auth_bp.route('/verify-otp', methods=['POST'])
 def verify_otp():

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Html5QrcodeScanner } from 'html5-qrcode'
-import { Calendar, CheckCircle, Clock, Camera, X } from 'lucide-react'
+import { Calendar, CheckCircle, Clock, Camera, X, Wind } from 'lucide-react'
 import apiClient from '../apiClient'
 
 const LaundryBooking = () => {
@@ -197,7 +197,7 @@ const LaundryBooking = () => {
 
           {myBookings.length === 0 ? (
             <div className="card" style={{ textAlign: 'center', color: '#94a3b8', padding: 40 }}>
-              <Shirt size={40} style={{ margin: '0 auto 12px', opacity: .3 }} color="#94a3b8" />
+              <Wind size={40} style={{ margin: '0 auto 12px', opacity: .3 }} color="#94a3b8" />
               <p>No laundry bookings yet.</p>
             </div>
           ) : myBookings.map(b => (

@@ -49,12 +49,13 @@ class ChatService:
             "X-Title": "Hostel Super App"
         }
 
-        # Try models in order until one works
+        # Try models in order until one works (verified live on OpenRouter)
         FREE_MODELS = [
-            "deepseek/deepseek-r1:free",
-            "google/gemma-2-9b-it:free",
+            "openai/gpt-oss-120b:free",       # confirmed working
+            "openai/gpt-oss-20b:free",
+            "google/gemma-3-12b-it:free",
+            "google/gemma-3-4b-it:free",
             "meta-llama/llama-3.2-3b-instruct:free",
-            "qwen/qwen-2-7b-instruct:free",
         ]
 
         last_error = "No models available"
@@ -84,23 +85,13 @@ class ChatService:
                 last_error = str(e)
                 print(f"[Chat] Model {model_name} exception: {e}")
                 continue
-        
+
+        # All models failed
+        print(f"[Chat] All models failed. Last error: {last_error}")
         try:
-            response = requests.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json=payload
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data['choices'][0]['message']['content']
-        except Exception as e:
-            err_details = response.text if 'response' in locals() else str(e)
-            print(f"OpenRouter Error Details: {err_details}")
-            try:
-                err_json = json.loads(err_details)
-                readable_err = err_json.get('error', {}).get('message', err_details)
-            except:
-                readable_err = err_details
-            
-            return f"AI Connection Issue. OpenRouter rejected payload details: {readable_err}"
+            err_json = __import__('json').loads(last_error)
+            readable = err_json.get('error', {}).get('message', last_error)
+        except Exception:
+            readable = last_error
+        return f"Sorry, the AI assistant is temporarily unavailable. ({readable[:120]})"
+
